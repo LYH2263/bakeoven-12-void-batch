@@ -23,13 +23,16 @@ from app.services.oven_engine import (
 
 api_router = APIRouter()
 
+STATUS_SCHEDULED = "scheduled"
+STATUS_CANCELLED = "cancelled"
+
 
 def _recipe(p: Product) -> RecipeDurations:
     return RecipeDurations(p.ferment_min, p.bake_min)
 
 
 def _all_occupancies(db: Session) -> list[Occupancy]:
-    batches = db.scalars(select(Batch)).all()
+    batches = db.scalars(select(Batch).where(Batch.status != STATUS_CANCELLED)).all()
     out: list[Occupancy] = []
     for b in batches:
         p = db.get(Product, b.product_id)
@@ -111,10 +114,25 @@ def create_batch(body: BatchCreate, db: Session = Depends(get_db)):
     return _batch_out(db, batch)
 
 
+@api_router.post("/batches/{batch_id}/cancel", response_model=BatchOut)
+def cancel_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(Batch, batch_id)
+    if not batch:
+        raise HTTPException(404, "批次不存在")
+    if batch.status != STATUS_CANCELLED:
+        batch.status = STATUS_CANCELLED
+        db.commit()
+        db.refresh(batch)
+    return _batch_out(db, batch)
+
+
 @api_router.get("/gantt", response_model=list[GanttBlock])
 def gantt(db: Session = Depends(get_db)):
     blocks: list[GanttBlock] = []
-    for b in db.scalars(select(Batch).order_by(Batch.start_min)).all():
+    rows = db.scalars(
+        select(Batch).where(Batch.status != STATUS_CANCELLED).order_by(Batch.start_min)
+    ).all()
+    for b in rows:
         p = db.get(Product, b.product_id)
         o = db.get(Oven, b.oven_id)
         if not p or not o:
