@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 type P = { id: number; name: string }; type O = { id: number; label: string };
 type B = { id: number; code: string; product_name?: string; oven_label?: string; start_min: number; ferment_end?: number; bake_end?: number; status: string };
+const STATUS_LABEL: Record<string, string> = { scheduled: "已排产", void: "作废" };
 function fmt(m: number) { const h = Math.floor(m/60), mm = m%60; return `${String(h).padStart(2,"0")}:${String(mm).padStart(2,"0")}`; }
 export default function BatchesPage() {
   const [products, setProducts] = useState<P[]>([]);
@@ -23,6 +24,14 @@ export default function BatchesPage() {
       reload();
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   }
+  async function voidBatch(id: number) {
+    setMsg(""); setErr("");
+    try {
+      const b = await api<B>(`/batches/${id}/void`, { method: "POST" });
+      setMsg(`已作废 ${b.code}`);
+      reload();
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  }
   return (<>
     <h2>批次</h2>
     <div className="toolbar">
@@ -33,9 +42,10 @@ export default function BatchesPage() {
     </div>
     {msg && <div className="ok">{msg}</div>}
     {err && <div className="err">{err}</div>}
-    <table className="table"><thead><tr><th>批次</th><th>产品</th><th>炉位</th><th>发酵</th><th>烘烤结束</th><th>状态</th></tr></thead>
-    <tbody>{rows.map(b => <tr key={b.id}><td className="mono">{b.code}</td><td>{b.product_name}</td><td>{b.oven_label}</td>
+    <table className="table"><thead><tr><th>批次</th><th>产品</th><th>炉位</th><th>发酵</th><th>烘烤结束</th><th>状态</th><th>操作</th></tr></thead>
+    <tbody>{rows.map(b => <tr key={b.id} className={b.status === "void" ? "void-row" : undefined}><td className="mono">{b.code}</td><td>{b.product_name}</td><td>{b.oven_label}</td>
       <td className="mono">{fmt(b.start_min)}–{fmt(b.ferment_end ?? b.start_min)}</td>
-      <td className="mono">{fmt(b.bake_end ?? b.start_min)}</td><td>{b.status}</td></tr>)}</tbody></table>
+      <td className="mono">{fmt(b.bake_end ?? b.start_min)}</td><td>{STATUS_LABEL[b.status] ?? b.status}</td>
+      <td>{b.status !== "void" && <button onClick={() => voidBatch(b.id)}>作废</button>}</td></tr>)}</tbody></table>
   </>);
 }

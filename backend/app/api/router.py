@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.models import Batch, ConflictLog, Oven, Product
+from app.models.models import STATUS_VOID, Batch, ConflictLog, Oven, Product
 from app.schemas.schemas import (
     BatchCreate,
     BatchOut,
@@ -32,6 +32,8 @@ def _all_occupancies(db: Session) -> list[Occupancy]:
     batches = db.scalars(select(Batch)).all()
     out: list[Occupancy] = []
     for b in batches:
+        if b.status == STATUS_VOID:
+            continue  # 作废批次不再占炉
         p = db.get(Product, b.product_id)
         if not p:
             continue
@@ -111,10 +113,24 @@ def create_batch(body: BatchCreate, db: Session = Depends(get_db)):
     return _batch_out(db, batch)
 
 
+@api_router.post("/batches/{batch_id}/void", response_model=BatchOut)
+def void_batch(batch_id: int, db: Session = Depends(get_db)):
+    batch = db.get(Batch, batch_id)
+    if not batch:
+        raise HTTPException(404, "批次不存在")
+    if batch.status != STATUS_VOID:
+        batch.status = STATUS_VOID
+        db.commit()
+        db.refresh(batch)
+    return _batch_out(db, batch)
+
+
 @api_router.get("/gantt", response_model=list[GanttBlock])
 def gantt(db: Session = Depends(get_db)):
     blocks: list[GanttBlock] = []
     for b in db.scalars(select(Batch).order_by(Batch.start_min)).all():
+        if b.status == STATUS_VOID:
+            continue  # 作废批次不上甘特
         p = db.get(Product, b.product_id)
         o = db.get(Oven, b.oven_id)
         if not p or not o:

@@ -5,6 +5,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
+STATUS_SCHEDULED = "scheduled"
+STATUS_VOID = "void"
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -28,7 +31,7 @@ class Batch(Base):
     oven_id: Mapped[int] = mapped_column(ForeignKey("ovens.id"))
     code: Mapped[str] = mapped_column(String(40), unique=True)
     start_min: Mapped[int] = mapped_column(Integer)  # minutes from 00:00
-    status: Mapped[str] = mapped_column(String(20), default="scheduled")
+    status: Mapped[str] = mapped_column(String(20), default=STATUS_SCHEDULED)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
